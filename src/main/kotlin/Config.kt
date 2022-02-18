@@ -71,6 +71,7 @@ data class Config(val server: String, val port: Short) {
 
 			if (local == null || server.config.forge_version != local.config.forge_version) {
 				mmc.updateForge(server.config.forge_version)
+				mmc.updateMc(server.config.mc_version)
 				jobs.add(async { updateMMC(mmc) })
 			}
 
