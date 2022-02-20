@@ -4,17 +4,75 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.utils.io.*
+import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.*
 import java.io.File
 import java.lang.reflect.Type
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 
-data class Config(val server: String, val port: Short) {
+data class ConfigSync(
+	val on_launch: Boolean?,
+	val on_mc_update: Boolean?,
+	val on_forge_update: Boolean?,
+	val on_mod_update: Boolean?
+)
+
+data class Config(val server: String, val port: Short, val config_sync: ConfigSync) {
 	suspend fun loadConfig(): Server {
 		val client = HttpClient(CIO)
 		val resp: HttpResponse = client.get("http://${server}:${port}/config.json")
 
 		val server = Gson().fromJson<Server>(resp.content.readUTF8Line(Int.MAX_VALUE)!!, SERVER_TYPE)
 		return server
+	}
+
+	suspend fun loadConfigFile(): ZipInputStream {
+		val client = HttpClient(CIO)
+		val resp: HttpResponse = client.get("http://${server}:${port}/config.zip")
+
+		return ZipInputStream(resp.content.toInputStream())
+	}
+
+	private var alreadySyncConfig: Boolean = false
+
+
+	suspend fun syncConfigs() {
+		if (alreadySyncConfig) return
+		alreadySyncConfig = true
+		val cfgFolder = File("config")
+
+		if (!cfgFolder.exists()) cfgFolder.mkdir()
+
+		val configData = loadConfigFile()
+
+		val cfgBackUpFolder = File("config.old")
+		if (!cfgBackUpFolder.exists()) cfgBackUpFolder.mkdir()
+
+
+		configData.use {
+			var ent: ZipEntry?
+
+			while (it.nextEntry.also { e -> ent = e } != null) {
+				val e = ent ?: break
+				if (!e.isDirectory) {
+					val relativeName = e.name.drop(7)
+
+					val outFile = File(cfgFolder, relativeName)
+					if (outFile.exists()) {
+						File(cfgBackUpFolder, relativeName).also { out ->
+							out.parentFile.mkdirs()
+							outFile.renameTo(out)
+						}
+					}
+					outFile.parentFile.mkdirs()
+					outFile.outputStream().run {
+						it.transferTo(this)
+						it.closeEntry()
+					}
+				}
+			}
+		}
 	}
 
 	suspend fun loadLocal(): Server? {
@@ -63,25 +121,49 @@ data class Config(val server: String, val port: Short) {
 			val _local = async { loadLocal() }
 			val _mmc = async { getMMC() }
 
+			val jobs = mutableListOf<Deferred<Any?>>()
+
+			if (config_sync.on_launch == true) {
+				jobs.add(async { syncConfigs() })
+			}
+
 			val server = _server.await()
 			val local = _local.await()
 			val mmc = _mmc.await()
 
-			val jobs = mutableListOf<Deferred<Any?>>()
+			val modBackUpFolder = File("mods.old")
+			if (!modBackUpFolder.exists()) modBackUpFolder.mkdir()
+			if (local == null) {
+				File("mods").listFiles().asSequence().filter { it.isFile }.map {
+					println(File(modBackUpFolder, it.name))
+					async { it.renameTo(File(modBackUpFolder, it.name)) }
+				}.forEach { it.join() }
+			}
 
 			if (local == null || server.config.forge_version != local.config.forge_version) {
-				mmc.updateForge(server.config.forge_version)
-				mmc.updateMc(server.config.mc_version)
+				if (mmc.updateForge(server.config.forge_version) && config_sync.on_forge_update == true && !alreadySyncConfig) {
+					jobs.add(async { syncConfigs() })
+				}
+				if (mmc.updateMc(server.config.mc_version) && config_sync.on_mc_update != false && !alreadySyncConfig) {
+					jobs.add(async { syncConfigs() })
+				}
 				jobs.add(async { updateMMC(mmc) })
 			}
 
 			val (a, r) = local?.diff(server) ?: server.diff(local)
 
-			for (mod in a.asSequence()) {
+			if ((a.isNotEmpty() || r.isNotEmpty()) && config_sync.on_mc_update != false && !alreadySyncConfig) {
+				jobs.add(async { syncConfigs() })
+			}
+
+			for (mod in a) {
 				jobs.add(async { downloadMod(mod.file_name) })
 			}
-			for (mod in r.asSequence()) {
-				jobs.add(async { File("mods", mod.file_name).delete() })
+
+			for (mod in r) {
+				jobs.add(async {
+					File("mods", mod.file_name).renameTo(File(modBackUpFolder, mod.file_name))
+				})
 			}
 			jobs.joinAll()
 			saveLocal(server)

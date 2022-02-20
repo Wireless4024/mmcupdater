@@ -18,14 +18,16 @@ data class MultiMC(var components: Array<Component>, val formatVersion: Int) {
 		return result
 	}
 
-	fun updateLWJGL3(newVersion: String){
+	fun updateLWJGL3(newVersion: String) {
 		components.firstOrNull() { it.uid == "org.lwjgl3" }?.run {
 			version = newVersion
 		}
 	}
 
-	fun updateMc(newVersion: String) {
+	fun updateMc(newVersion: String): Boolean {
+		var changed = false
 		components.firstOrNull() { it.uid == "net.minecraft" }?.run {
+			changed = version != newVersion
 			version = newVersion
 		}
 		components.firstOrNull() { it.uid == "net.fabricmc.intermediary" }?.run {
@@ -34,13 +36,17 @@ data class MultiMC(var components: Array<Component>, val formatVersion: Int) {
 			else
 				newVersion
 		}
-
+		return changed
 	}
 
-	fun updateForge(newVersion: String){
+	fun updateForge(newVersion: String): Boolean {
+		var changed = false
+
 		components.firstOrNull() { it.uid == "net.minecraftforge" }?.run {
+			changed = version != newVersion
 			version = newVersion
 		}
+		return changed
 	}
 
 	fun updateFabric(newVersion: String) {

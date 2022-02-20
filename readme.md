@@ -2,6 +2,39 @@
 
 Simple minecraft mod-pack updater for multimc by fetch mod data from server and compare changes
 
+## Getting started
++ You have to setup [Server](https://github.com/Wireless4024/mmcupdater-server) before continue
++ Download [latest zip](https://github.com/Wireless4024/mmcupdater/releases/) in release
++ Import into multi-mc
++ Follow [config](#config-file) to custom your pack
+  > you don't have to ship any config and mods (it will automatically sync with server)
++ Export instance
+  > don't include `current.json` if you don't ship config or mod
+
+## Config file
+[config.json](config.json)
+```json5
+{
+   // server host
+   "server": "localhost",
+   // server port
+   "port": 8888,
+   "config_sync": {
+      // if true it will sync config from everytime that you launch game
+      // better don't enable because it will reset your config every restart
+      "on_launch": false,
+      // if true it will only sync config when minecraft version update
+      "on_mc_update": true,
+      // if true it will only sync config when forge version update
+      "on_forge_update": false,
+      // if true it will only sync config when mod update
+      "on_mod_update": false
+   }
+}
+```
+Note: to refresh config just single time you can remove `current.json` in `.minecraft` at instance folder 
+
+
 ## At client side
 1. Run `./gradlew jar`
 2. Output file (fat jar) is in `build/libs` directory 

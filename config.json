@@ -1,4 +1,10 @@
 {
   "server": "localhost",
-  "port": 3003
+  "port": 8888,
+  "config_sync": {
+    "on_launch": false,
+    "on_mc_update": true,
+    "on_forge_update": false,
+    "on_mod_update": false
+  }
 }
