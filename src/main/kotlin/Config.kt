@@ -40,38 +40,42 @@ data class Config(val server: String, val port: Short, val config_sync: ConfigSy
 	suspend fun syncConfigs() {
 		if (alreadySyncConfig) return
 		alreadySyncConfig = true
-		val cfgFolder = File("config")
+		try {
+			val cfgFolder = File("config")
 
-		if (!cfgFolder.exists()) cfgFolder.mkdir()
+			if (!cfgFolder.exists()) cfgFolder.mkdir()
 
-		val configData = loadConfigFile()
+			val configData = loadConfigFile()
 
-		val cfgBackUpFolder = File("config.old")
-		if (!cfgBackUpFolder.exists()) cfgBackUpFolder.mkdir()
+			val cfgBackUpFolder = File("config.old")
+			if (!cfgBackUpFolder.exists()) cfgBackUpFolder.mkdir()
 
 
-		configData.use {
-			var ent: ZipEntry?
+			configData.use {
+				var ent: ZipEntry?
 
-			while (it.nextEntry.also { e -> ent = e } != null) {
-				val e = ent ?: break
-				if (!e.isDirectory) {
-					val relativeName = e.name.drop(7)
+				while (it.nextEntry.also { e -> ent = e } != null) {
+					val e = ent ?: break
+					if (!e.isDirectory) {
+						val relativeName = e.name.drop(7)
 
-					val outFile = File(cfgFolder, relativeName)
-					if (outFile.exists()) {
-						File(cfgBackUpFolder, relativeName).also { out ->
-							out.parentFile.mkdirs()
-							outFile.renameTo(out)
+						val outFile = File(cfgFolder, relativeName)
+						if (outFile.exists()) {
+							File(cfgBackUpFolder, relativeName).also { out ->
+								out.parentFile.mkdirs()
+								outFile.renameTo(out)
+							}
 						}
-					}
-					outFile.parentFile.mkdirs()
-					outFile.outputStream().run {
-						it.transferTo(this)
-						it.closeEntry()
+						outFile.parentFile.mkdirs()
+						outFile.outputStream().run {
+							it.transferTo(this)
+							it.closeEntry()
+						}
 					}
 				}
 			}
+		} catch (_: Throwable) {
+			System.err.println("Server doesn't provide config file")
 		}
 	}
 
